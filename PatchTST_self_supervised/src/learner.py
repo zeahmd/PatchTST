@@ -161,7 +161,8 @@ class Learner(GetAttr):
         
     def _do_batch_train(self):        
         # forward + get loss + backward + optimize          
-        self.pred, self.loss = self.train_step(self.batch)                                      
+        self.pred, self.loss = self.train_step(self.batch)
+        # print(self.loss)                                      
         # zero the parameter gradients
         self.opt.zero_grad()                 
         # gradient
@@ -186,11 +187,13 @@ class Learner(GetAttr):
 
     def _do_batch_validate(self):       
         # forward + calculate loss
-        self.pred, self.loss = self.valid_step(self.batch)     
+        self.pred, self.loss = self.valid_step(self.batch)
+        # print(self.loss)     
 
     def valid_step(self, batch):
         # get the inputs
         self.xb, self.yb = batch
+        # print(self.xb[0])
         # forward
         pred = self.model_forward()
         # compute loss

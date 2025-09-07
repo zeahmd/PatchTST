@@ -52,7 +52,7 @@ class PatchMaskCB(Callback):
     def patch_masking(self):
         """
         xb: [bs x seq_len x n_vars] -> [bs x num_patch x n_vars x patch_len]
-        """
+        """ 
         xb_patch, num_patch = create_patch(self.xb, self.patch_len, self.stride)    # xb_patch: [bs x num_patch x n_vars x patch_len]
         xb_mask, _, self.mask, _ = random_masking(xb_patch, self.mask_ratio)   # xb_mask: [bs x num_patch x n_vars x patch_len]
         self.mask = self.mask.bool()    # mask: [bs x num_patch x n_vars]
@@ -74,6 +74,9 @@ def create_patch(xb, patch_len, stride):
     """
     xb: [bs x seq_len x n_vars]
     """
+    # NOTE: xb expects to be a 3D tensor
+    xb = xb[:, :, None]
+
     seq_len = xb.shape[1]
     num_patch = (max(seq_len, patch_len)-patch_len) // stride + 1
     tgt_len = patch_len  + stride*(num_patch-1)

@@ -8,17 +8,35 @@ import sys
 
 from src.data.datamodule import DataLoaders
 from src.data.pred_dataset import *
+from src.data.vitaldb_datasets import *
 
-DSETS = ['ettm1', 'ettm2', 'etth1', 'etth2', 'electricity',
-         'traffic', 'illness', 'weather', 'exchange'
-        ]
+# DSETS = ['ettm1', 'ettm2', 'etth1', 'etth2', 'electricity',
+#          'traffic', 'illness', 'weather', 'exchange'
+#         ]
+DSETS = ['eeg_time', 'eeg_freq', 'eeg_time_freq']
 
 def get_dls(params):
     
     assert params.dset in DSETS, f"Unrecognized dset (`{params.dset}`). Options include: {DSETS}"
     if not hasattr(params,'use_time_features'): params.use_time_features = False
 
-    if params.dset == 'ettm1':
+    if params.dset == 'eeg_time':
+        root_path = '/home/permute/Documents/FAU Erlangen-Nürnberg/Thesis/data'
+        size = [params.context_points, 0, params.target_points]
+        dls = DataLoaders(
+                datasetCls=EEGSegmentDataset,
+                dataset_kwargs={
+                'data_dir': root_path,
+                'segment_sec': params.segment_sec,
+                'eeg_rate': params.eeg_rate,
+                'emg_rate': params.emg_rate,
+                'stride_sec': params.stride_sec,
+                'mode': params.mode,
+                },
+                batch_size=params.batch_size,
+                workers=params.num_workers,
+                )
+    elif params.dset == 'ettm1':
         root_path = '/data/datasets/public/ETDataset/ETT-small/'
         size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(
@@ -34,8 +52,6 @@ def get_dls(params):
                 batch_size=params.batch_size,
                 workers=params.num_workers,
                 )
-
-
     elif params.dset == 'ettm2':
         root_path = '/data/datasets/public/ETDataset/ETT-small/'
         size = [params.context_points, 0, params.target_points]
@@ -174,8 +190,8 @@ def get_dls(params):
                 workers=params.num_workers,
                 )
     # dataset is assume to have dimension len x nvars
-    dls.vars, dls.len = dls.train.dataset[0][0].shape[1], params.context_points
-    dls.c = dls.train.dataset[0][1].shape[0]
+    # dls.vars, dls.len = dls.train.dataset[0][0].shape[1], params.context_points
+    # dls.c = dls.train.dataset[0][1].shape[0]
     return dls
 
 

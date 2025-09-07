@@ -12,7 +12,7 @@ class DataLoaders:
         batch_size: int,
         workers: int=0,
         collate_fn=None,
-        shuffle_train = True,
+        shuffle_train = False,
         shuffle_val = False
     ):
         super().__init__()

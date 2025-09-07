@@ -46,6 +46,10 @@ def get_device(use_cuda=True, device_id=None, usage=5):
 def set_device(usage=5):    
     "set the device that has usage < default usage  "
     device_ids = get_available_cuda(usage=usage)
+    if not device_ids:
+        print('No available GPU device found with usage <', usage, '%')
+        print('Using CPU instead.')
+        return
     torch.cuda.set_device(device_ids[0])   # get the first available device
 
 
@@ -57,7 +61,7 @@ def default_device(use_cuda=True):
 
 
 def get_available_cuda(usage=10):
-    if not torch.cuda.is_available(): return
+    if not torch.cuda.is_available(): return 
     # collect available cuda devices, only collect devices that has less that 'usage' percent 
     device_ids = []
     for device in range(torch.cuda.device_count()):

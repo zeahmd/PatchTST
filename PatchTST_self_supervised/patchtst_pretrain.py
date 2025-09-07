@@ -20,16 +20,16 @@ import argparse
 
 parser = argparse.ArgumentParser()
 # Dataset and dataloader
-parser.add_argument('--dset_pretrain', type=str, default='etth1', help='dataset name')
-parser.add_argument('--context_points', type=int, default=512, help='sequence length')
+parser.add_argument('--dset_pretrain', type=str, default='eeg_time', help='dataset name')
+parser.add_argument('--context_points', type=int, default=64, help='sequence length') # default=512
 parser.add_argument('--target_points', type=int, default=96, help='forecast horizon')
 parser.add_argument('--batch_size', type=int, default=64, help='batch size')
 parser.add_argument('--num_workers', type=int, default=0, help='number of workers for DataLoader')
 parser.add_argument('--scaler', type=str, default='standard', help='scale the input data')
 parser.add_argument('--features', type=str, default='M', help='for multivariate model or univariate model')
 # Patch
-parser.add_argument('--patch_len', type=int, default=12, help='patch length')
-parser.add_argument('--stride', type=int, default=12, help='stride between patch')
+parser.add_argument('--patch_len', type=int, default=64, help='patch length') # default=512
+parser.add_argument('--stride', type=int, default=64, help='stride between patch') # default=256
 # RevIN
 parser.add_argument('--revin', type=int, default=1, help='reversible instance normalization')
 # Model args
@@ -42,11 +42,21 @@ parser.add_argument('--head_dropout', type=float, default=0.2, help='head dropou
 # Pretrain mask
 parser.add_argument('--mask_ratio', type=float, default=0.4, help='masking ratio for the input')
 # Optimization args
-parser.add_argument('--n_epochs_pretrain', type=int, default=10, help='number of pre-training epochs')
+parser.add_argument('--n_epochs_pretrain', type=int, default=100, help='number of pre-training epochs')
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 # model id to keep track of the number of models saved
 parser.add_argument('--pretrained_model_id', type=int, default=1, help='id of the saved pretrained model')
 parser.add_argument('--model_type', type=str, default='based_model', help='for multivariate model or univariate model')
+# adding vitaldb dataset args
+parser.add_argument('--segment_sec', type=int, default=5, help='segment length in seconds')
+parser.add_argument('--eeg_rate', type=int, default=128, help='EEG sampling rate')
+parser.add_argument('--emg_rate', type=int, default=1, help='EMG sampling rate')
+parser.add_argument('--stride_sec', type=int, default=5, help='stride length in seconds')
+parser.add_argument('--mode', type=str, default='pretrain', help='mode of the dataset, pretrain or finetune')
+# adding some new args
+parser.add_argument('--c_in', type=int, default=1, help='number of input channels')
+parser.add_argument('--target_dim', type=int, default=1, help='number of output channels')
+parser.add_argument('--num_patch', type=int, default=10, help='number of patches') # default=4
 
 
 args = parser.parse_args()
@@ -60,20 +70,21 @@ if not os.path.exists(args.save_path): os.makedirs(args.save_path)
 set_device()
 
 
-def get_model(c_in, args):
+# def get_model(c_in, args):
+def get_model(args):
     """
     c_in: number of variables
     """
     # get number of patches
-    num_patch = (max(args.context_points, args.patch_len)-args.patch_len) // args.stride + 1    
-    print('number of patches:', num_patch)
+    # num_patch = (max(args.context_points, args.patch_len)-args.patch_len) // args.stride + 1    
+    # print('number of patches:', num_patch)
     
     # get model
-    model = PatchTST(c_in=c_in,
-                target_dim=args.target_points,
+    model = PatchTST(c_in=args.c_in,
+                target_dim=args.target_dim,
                 patch_len=args.patch_len,
                 stride=args.stride,
-                num_patch=num_patch,
+                num_patch=args.num_patch,
                 n_layers=args.n_layers,
                 n_heads=args.n_heads,
                 d_model=args.d_model,
@@ -93,7 +104,8 @@ def get_model(c_in, args):
 def find_lr():
     # get dataloader
     dls = get_dls(args)    
-    model = get_model(dls.vars, args)
+    # model = get_model(dls.vars, args)
+    model = get_model(args)
     # get loss
     loss_func = torch.nn.MSELoss(reduction='mean')
     # get callbacks
@@ -116,11 +128,14 @@ def pretrain_func(lr=args.lr):
     # get dataloader
     dls = get_dls(args)
     # get model     
-    model = get_model(dls.vars, args)
+    # model = get_model(dls.vars, args)
+    model = get_model(args)
     # get loss
     loss_func = torch.nn.MSELoss(reduction='mean')
     # get callbacks
-    cbs = [RevInCB(dls.vars, denorm=False)] if args.revin else []
+    # cbs = [RevInCB(dls.vars, denorm=False)] if args.revin else []
+    # cbs = [RevInCB(args.c_in, denorm=False)] if args.revin else [] # we don't need revin for vitaldb
+    cbs = []
     cbs += [
          PatchMaskCB(patch_len=args.patch_len, stride=args.stride, mask_ratio=args.mask_ratio),
          SaveModelCB(monitor='valid_loss', fname=args.save_pretrained_model,                       
@@ -145,8 +160,9 @@ def pretrain_func(lr=args.lr):
 if __name__ == '__main__':
     
     args.dset = args.dset_pretrain
-    suggested_lr = find_lr()
+    # suggested_lr = find_lr()
     # Pretrain
+    suggested_lr = args.lr  # Use the default learning rate for pretraining
     pretrain_func(suggested_lr)
     print('pretraining completed')
     
