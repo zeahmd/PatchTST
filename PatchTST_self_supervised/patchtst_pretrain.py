@@ -52,7 +52,7 @@ parser.add_argument('--segment_sec', type=int, default=5, help='segment length i
 parser.add_argument('--eeg_rate', type=int, default=128, help='EEG sampling rate')
 parser.add_argument('--emg_rate', type=int, default=1, help='EMG sampling rate')
 parser.add_argument('--stride_sec', type=int, default=5, help='stride length in seconds')
-parser.add_argument('--mode', type=str, default='pretrain', help='mode of the dataset, pretrain or finetune')
+parser.add_argument('--mode', type=str, default='pretrain', help='mode of the dataset, pretrain, alltrain or finetune')
 # adding some new args
 parser.add_argument('--c_in', type=int, default=1, help='number of input channels')
 parser.add_argument('--target_dim', type=int, default=1, help='number of output channels')

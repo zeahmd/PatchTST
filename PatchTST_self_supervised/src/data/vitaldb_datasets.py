@@ -11,6 +11,8 @@ class EEGSegmentDataset(Dataset):
         self.data_dir = data_dir + '/'
         if (split == 'train' and mode == 'pretrain'):
             self.data_dir = os.path.join(self.data_dir, 'pre-train')
+        elif (split == 'train' and mode == 'alltrain'):
+            self.data_dir = os.path.join(self.data_dir, 'all-train')
         elif (split == 'train' and mode == 'finetune'):
             self.data_dir = os.path.join(self.data_dir, 'fine-train')
         elif split == 'val':
@@ -86,7 +88,7 @@ class EEGSegmentDataset(Dataset):
         if self.mode == 'pretrain':
             #  return eeg_tensor, emg_avg_tensor
             return eeg_tensor, eeg_tensor # first eeg_tensor will be masked in a callback function
-        elif self.mode == 'finetune':
+        elif (self.mode == 'finetune') or (self.mode == 'alltrain'):
             return eeg_tensor, bis_avg_tensor
         else:
             raise ValueError("Mode must be 'pretrain' or 'finetune'.")
