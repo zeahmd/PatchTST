@@ -109,7 +109,8 @@ def find_lr():
     # get loss
     loss_func = torch.nn.MSELoss(reduction='mean')
     # get callbacks
-    cbs = [RevInCB(dls.vars, denorm=False)] if args.revin else []
+    # cbs = [RevInCB(dls.vars, denorm=False)] if args.revin else []
+    cbs = []
     cbs += [PatchMaskCB(patch_len=args.patch_len, stride=args.stride, mask_ratio=args.mask_ratio)]
         
     # define learner
@@ -160,9 +161,10 @@ def pretrain_func(lr=args.lr):
 if __name__ == '__main__':
     
     args.dset = args.dset_pretrain
-    # suggested_lr = find_lr()
+    suggested_lr = find_lr()
+    print('suggested_lr', suggested_lr)
     # Pretrain
-    suggested_lr = args.lr  # Use the default learning rate for pretraining
+    # suggested_lr = args.lr  # Use the default learning rate for pretraining
     pretrain_func(suggested_lr)
     print('pretraining completed')
     
