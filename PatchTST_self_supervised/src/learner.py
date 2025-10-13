@@ -53,7 +53,7 @@ class Learner(GetAttr):
     def default_callback(self):
         "get a set of default callbacks"
         default_cbs = [ SetupLearnerCB(), TrackTimerCB(), 
-                        TrackTrainingCB(train_metrics=False, valid_metrics=True)]                  
+                        TrackTrainingCB(train_metrics=True, valid_metrics=True)]                  
         return default_cbs
     
 
@@ -173,10 +173,12 @@ class Learner(GetAttr):
     def train_step(self, batch):
         # get the inputs
         self.xb, self.yb = batch
+        # print(torch.isnan(self.xb.sum()), torch.isnan(self.yb.sum()))
         # forward
         pred = self.model_forward()
         # compute loss
         loss = self.loss_func(pred, self.yb)
+        # print(loss)
         return pred, loss
 
     def model_forward(self):

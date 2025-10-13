@@ -19,3 +19,10 @@ def r2_score(y_true, y_pred):
 def mape(y_true, y_pred):
     from sklearn.metrics import mean_absolute_percentage_error
     return mean_absolute_percentage_error(y_true, y_pred)
+
+def accuracy(y_true, y_pred):
+    _, predicted = torch.max(y_pred, 1)  # Get predicted class indices
+    # predicted = y_pred.argmax(1)
+    correct = (y_true == predicted).sum().item()
+    total = y_true.size(0)
+    return correct / total

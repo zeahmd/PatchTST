@@ -23,15 +23,15 @@ parser = argparse.ArgumentParser()
 # Dataset and dataloader
 parser.add_argument('--dset', type=str, default='eeg_time', help='dataset name')
 parser.add_argument('--context_points', type=int, default=64, help='sequence length') # default=512
-parser.add_argument('--target_points', type=int, default=96, help='forecast horizon')
+parser.add_argument('--target_points', type=int, default=6, help='forecast horizon')
 parser.add_argument('--batch_size', type=int, default=64, help='batch size')
 parser.add_argument('--num_workers', type=int, default=0, help='number of workers for DataLoader')
 parser.add_argument('--scaler', type=str, default='standard', help='scale the input data')
 parser.add_argument('--features', type=str, default='M', help='for multivariate model or univariate model')
 # parser.add_argument('--use_time_features', type=int, default=0, help='whether to use time features or not')
 # Patch
-parser.add_argument('--patch_len', type=int, default=64, help='patch length')
-parser.add_argument('--stride', type=int, default=64, help='stride between patch')
+parser.add_argument('--patch_len', type=int, default=128, help='patch length')
+parser.add_argument('--stride', type=int, default=128, help='stride between patch')
 # RevIN
 parser.add_argument('--revin', type=int, default=1, help='reversible instance normalization')
 # Model args
@@ -43,22 +43,22 @@ parser.add_argument('--dropout', type=float, default=0.2, help='Transformer drop
 parser.add_argument('--head_dropout', type=float, default=0, help='head dropout')
 # Optimization args
 parser.add_argument('--n_epochs', type=int, default=100, help='number of training epochs')
-parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
+parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
 # model id to keep track of the number of models saved
 parser.add_argument('--model_id', type=int, default=1, help='id of the saved model')
 parser.add_argument('--model_type', type=str, default='based_model', help='for multivariate model or univariate model')
 # training
 parser.add_argument('--is_train', type=int, default=1, help='training the model')
 # adding vitaldb dataset args
-parser.add_argument('--segment_sec', type=int, default=5, help='segment length in seconds')
+parser.add_argument('--segment_sec', type=int, default=20, help='segment length in seconds')
 parser.add_argument('--eeg_rate', type=int, default=128, help='EEG sampling rate')
 parser.add_argument('--emg_rate', type=int, default=1, help='EMG sampling rate')
-parser.add_argument('--stride_sec', type=int, default=5, help='stride length in seconds')
+parser.add_argument('--stride_sec', type=int, default=20, help='stride length in seconds')
 parser.add_argument('--mode', type=str, default='alltrain', help='mode of the dataset, pretrain, alltrain or finetune')
 # adding some new args
 parser.add_argument('--c_in', type=int, default=1, help='number of input channels')
 parser.add_argument('--target_dim', type=int, default=1, help='number of output channels')
-parser.add_argument('--num_patch', type=int, default=10, help='number of patches') # default=4
+parser.add_argument('--num_patch', type=int, default=20, help='number of patches') # default=4
 
 
 args = parser.parse_args()
@@ -90,7 +90,8 @@ def get_model(args):
                 dropout=args.dropout,
                 head_dropout=args.head_dropout,
                 act='relu',
-                head_type='prediction',
+                # head_type='regression',
+                head_type='classification',
                 res_attention=False
                 )    
     return model
@@ -102,7 +103,8 @@ def find_lr():
     # model = get_model(dls.vars, args)
     model = get_model(args)
     # get loss
-    loss_func = torch.nn.MSELoss(reduction='mean')
+    # loss_func = torch.nn.MSELoss(reduction='mean')
+    loss_func = torch.nn.CrossEntropyLoss(reduction='mean')
     # get callbacks
     # cbs = [RevInCB(dls.vars)] if args.revin else []
     cbs = []
@@ -123,7 +125,8 @@ def train_func(lr=args.lr):
     model = get_model(args)
 
     # get loss
-    loss_func = torch.nn.MSELoss(reduction='mean')
+    # loss_func = torch.nn.MSELoss(reduction='mean')
+    loss_func = torch.nn.CrossEntropyLoss(reduction='mean')
 
     # get callbacks
     # cbs = [RevInCB(dls.vars)] if args.revin else []
@@ -139,11 +142,24 @@ def train_func(lr=args.lr):
                         loss_func, 
                         lr=lr, 
                         cbs=cbs,
-                        metrics=[mse]
+                        # metrics=[mse]
+                        metrics=[accuracy]
                         )
                         
     # fit the data to the model
     learn.fit_one_cycle(n_epochs=args.n_epochs, lr_max=lr, pct_start=0.2)
+
+    # save the train, val losses and metrics
+    df = pd.DataFrame(
+        data={
+            'train_loss': learn.recorder['train_loss'], 
+            'valid_loss': learn.recorder['valid_loss'],
+            'train_accuracy': learn.recorder['train_accuracy'],
+            'valid_accuracy': learn.recorder['valid_accuracy'],
+        }
+    )
+    df.to_csv(args.save_path + args.save_pretrained_model + '_losses_metrics.csv', float_format='%.6f', index=False)
+
 
 
 def test_func():
@@ -164,7 +180,7 @@ if __name__ == '__main__':
 
     if args.is_train:   # training mode
         # suggested_lr = find_lr()
-        suggested_lr = args.lr
+        suggested_lr = args.lr  # Use the default learning rate for supervised training
         print('suggested lr:', suggested_lr)
         train_func(suggested_lr)
     else:   # testing mode
