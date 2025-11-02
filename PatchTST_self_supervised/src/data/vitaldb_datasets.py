@@ -47,7 +47,6 @@ class EEGSegmentDataset(Dataset):
         # print(case_dirs[:5])
         # print(case_dirs[-5:])
         case_dirs = case_dirs[:50]
-        print(f"Using {len(case_dirs)} cases for mode {self.mode}.")
         for case_path in tqdm(case_dirs, desc=f"Reading {self.split} dataset"):
             eeg_path = os.path.join(case_path, 'eeg1.npy')
             emg_path = os.path.join(case_path, 'emg.npy')
