@@ -132,7 +132,7 @@ class Learner(GetAttr):
 
     def all_batches(self, type_):
         # for self.num,self.batch in enumerate(progress_bar(dl, leave=False)):        
-        for num, batch in enumerate(self.dl):            
+        for num, batch in enumerate(tqdm(self.dl, leave=False)):            
             self.iter, self.batch = num, batch            
             if type_ == 'train': self.batch_train()
             elif type_ == 'valid': self.batch_validate()
