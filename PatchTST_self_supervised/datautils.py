@@ -22,7 +22,7 @@ def get_dls(params):
 
     if params.dset == 'eeg_time':
         root_path = '/home/woody/iwso/iwso204h/vitaldb/cleaned_data'
-        size = [params.context_points, 0, params.target_points]
+        # size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(
                 datasetCls=EEGSegmentDataset,
                 dataset_kwargs={
@@ -197,16 +197,31 @@ def get_dls(params):
 
 
 if __name__ == "__main__":
+    # class Params:
+    #     dset= 'etth2'
+    #     context_points= 384
+    #     target_points= 96
+    #     batch_size= 64
+    #     num_workers= 8
+    #     with_ray= False
+    #     features='M'
+    # params = Params 
+    # dls = get_dls(params)
+    # for i, batch in enumerate(dls.valid):
+    #     print(i, len(batch), batch[0].shape, batch[1].shape)
+    # breakpoint()
     class Params:
-        dset= 'etth2'
-        context_points= 384
-        target_points= 96
+        dset= 'eeg_time'
+        segment_sec=20
+        eeg_rate=128
+        emg_rate=1
+        stride_sec=20
         batch_size= 64
-        num_workers= 8
-        with_ray= False
-        features='M'
-    params = Params 
+        num_workers= 1
+        mode='alltrain'
+    params = Params
     dls = get_dls(params)
-    for i, batch in enumerate(dls.valid):
+    for i, batch in enumerate(dls.train):
         print(i, len(batch), batch[0].shape, batch[1].shape)
     breakpoint()
+    
