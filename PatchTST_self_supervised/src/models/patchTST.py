@@ -103,7 +103,9 @@ class ClassificationHead(nn.Module):
         x: [bs x nvars x d_model x num_patch]
         output: [bs x n_classes]
         """
-        x = x[:,:,:,-1]             # only consider the last item in the sequence, x: bs x nvars x d_model
+        # x = x[:,:,:,-1]             # only consider the last item in the sequence, x: bs x nvars x d_model
+        x = x.mean(dim=-1)
+        # print("Mean over patches for classification head, x shape:", x.shape)
         x = self.flatten(x)         # x: bs x nvars * d_model
         x = self.dropout(x)
         y = self.linear(x)         # y: bs x n_classes
