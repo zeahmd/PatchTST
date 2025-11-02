@@ -24,8 +24,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--dset', type=str, default='eeg_time', help='dataset name')
 parser.add_argument('--context_points', type=int, default=64, help='sequence length') # default=512
 parser.add_argument('--target_points', type=int, default=6, help='forecast horizon')
-parser.add_argument('--batch_size', type=int, default=64, help='batch size')
-parser.add_argument('--num_workers', type=int, default=0, help='number of workers for DataLoader')
+parser.add_argument('--batch_size', type=int, default=512, help='batch size')
+parser.add_argument('--num_workers', type=int, default=8, help='number of workers for DataLoader')
 parser.add_argument('--scaler', type=str, default='standard', help='scale the input data')
 parser.add_argument('--features', type=str, default='M', help='for multivariate model or univariate model')
 # parser.add_argument('--use_time_features', type=int, default=0, help='whether to use time features or not')
@@ -43,7 +43,7 @@ parser.add_argument('--dropout', type=float, default=0.2, help='Transformer drop
 parser.add_argument('--head_dropout', type=float, default=0, help='head dropout')
 # Optimization args
 parser.add_argument('--n_epochs', type=int, default=100, help='number of training epochs')
-parser.add_argument('--lr', type=float, default=1e-3, help='learning rate')
+parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 # model id to keep track of the number of models saved
 parser.add_argument('--model_id', type=int, default=1, help='id of the saved model')
 parser.add_argument('--model_type', type=str, default='based_model', help='for multivariate model or univariate model')
@@ -63,7 +63,7 @@ parser.add_argument('--num_patch', type=int, default=20, help='number of patches
 
 args = parser.parse_args()
 print('args:', args)
-args.save_model_name = 'patchtst_supervised'+'_cw'+str(args.context_points)+'_tw'+str(args.target_points) + '_patch'+str(args.patch_len) + '_stride'+str(args.stride)+'_epochs'+str(args.n_epochs) + '_model' + str(args.model_id)
+args.save_model_name = 'patchtst_supervised'+'_batch'+str(args.batch_size)+'_patch_len'+str(args.patch_len) + '_num_patch'+str(args.num_patch) + '_mode'+str(args.mode)+'_epochs'+str(args.n_epochs) + '_model' + str(args.model_id)
 args.save_path = 'saved_models/' + args.dset + '/patchtst_supervised/' + args.model_type + '/'
 if not os.path.exists(args.save_path): os.makedirs(args.save_path)
 
@@ -118,6 +118,12 @@ def find_lr():
 def train_func(lr=args.lr):
     # get dataloader
     dls = get_dls(args)
+    train_label_dist = dls.get_label_distribution('train')
+    train_label_dist = [v for k, v in sorted(train_label_dist.items(), key=lambda item: item[0])]
+    # these class weights are computed as in scikit-learn compute_class_weight("balanced", ...)
+    # it makes sure that mean(weights) = 1.0 (and not the sum)
+    train_class_weights = 1.0 / torch.tensor(train_label_dist, dtype=torch.float)
+    train_class_weights = train_class_weights / train_class_weights.sum() * len(train_label_dist)
     # print('in out', dls.vars, dls.c, dls.len)
     
     # get model
@@ -126,7 +132,7 @@ def train_func(lr=args.lr):
 
     # get loss
     # loss_func = torch.nn.MSELoss(reduction='mean')
-    loss_func = torch.nn.CrossEntropyLoss(reduction='mean')
+    loss_func = torch.nn.CrossEntropyLoss(weight=train_class_weights, reduction='mean')
 
     # get callbacks
     # cbs = [RevInCB(dls.vars)] if args.revin else []
@@ -134,7 +140,7 @@ def train_func(lr=args.lr):
     cbs += [
          PatchCB(patch_len=args.patch_len, stride=args.stride),
          SaveModelCB(monitor='valid_loss', fname=args.save_model_name, 
-                     path=args.save_path )
+                     path=args.save_path ),
         ]
 
     # define learner
@@ -143,7 +149,14 @@ def train_func(lr=args.lr):
                         lr=lr, 
                         cbs=cbs,
                         # metrics=[mse]
-                        metrics=[accuracy]
+                        metrics=[
+                                accuracy,
+                                precision,
+                                recall,
+                                f1_score,
+                                auroc,
+                                conf_mat
+                            ]
                         )
                         
     # fit the data to the model
@@ -156,9 +169,17 @@ def train_func(lr=args.lr):
             'valid_loss': learn.recorder['valid_loss'],
             'train_accuracy': learn.recorder['train_accuracy'],
             'valid_accuracy': learn.recorder['valid_accuracy'],
+            'train_precision': learn.recorder['train_precision'],
+            'valid_precision': learn.recorder['valid_precision'],
+            'train_recall': learn.recorder['train_recall'],
+            'valid_recall': learn.recorder['valid_recall'],
+            'train_f1_score': learn.recorder['train_f1_score'],
+            'valid_f1_score': learn.recorder['valid_f1_score'],
+            'train_auroc': learn.recorder['train_auroc'],
+            'valid_auroc': learn.recorder['valid_auroc'],
         }
     )
-    df.to_csv(args.save_path + args.save_pretrained_model + '_losses_metrics.csv', float_format='%.6f', index=False)
+    df.to_csv(args.save_path + args.save_model_name + '_losses_metrics.csv', float_format='%.6f', index=False)
 
 
 
@@ -180,6 +201,7 @@ if __name__ == '__main__':
 
     if args.is_train:   # training mode
         # suggested_lr = find_lr()
+        # suggested_lr = 0.004037017258596558
         suggested_lr = args.lr  # Use the default learning rate for supervised training
         print('suggested lr:', suggested_lr)
         train_func(suggested_lr)
