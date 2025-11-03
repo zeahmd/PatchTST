@@ -17,10 +17,10 @@ DSETS = ['eeg_time', 'eeg_freq', 'eeg_time_freq']
 
 def get_dls(params):
     
-    assert params.dset in DSETS, f"Unrecognized dset (`{params.dset}`). Options include: {DSETS}"
+    assert params.dataset in DSETS, f"Unrecognized dset (`{params.dset}`). Options include: {DSETS}"
     if not hasattr(params,'use_time_features'): params.use_time_features = False
 
-    if params.dset == 'eeg_time':
+    if params.dataset == 'eeg_time':
         root_path = '/home/woody/iwso/iwso204h/vitaldb/cleaned_data'
         # size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(
