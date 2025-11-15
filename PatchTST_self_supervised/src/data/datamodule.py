@@ -69,7 +69,8 @@ class DataLoaders:
 
     def _make_dloader(self, split, shuffle=False):
         dataset = self.datasetCls(**self.dataset_kwargs, split=split)
-        self.label_distribution[split] = dataset.get_label_distribution()
+        if self.dataset_kwargs.get('mode') in ['alltrain', 'finetune']:
+            self.label_distribution[split] = dataset.get_label_distribution()
         sampler = self.get_sampler(dataset, self.dataset_kwargs.get('mode'), split)
         if len(dataset) == 0: return None
         return DataLoader(

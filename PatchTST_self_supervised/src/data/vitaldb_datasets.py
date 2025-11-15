@@ -40,13 +40,14 @@ class EEGSegmentDataset(Dataset):
     def create_supervised_index(self):
         self.index = [] 
 
-        self.dist_dict = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0}  # to record bis level distribution
+        # self.dist_dict = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0}  # to record bis level distribution
+        self.dist_dict = {0:0, 1:0, 2:0, 3:0}
         self.bis_list = []
         case_dirs = sorted(glob(os.path.join(self.data_dir, '*')))
         # print(f"Found {len(case_dirs)} cases in {self.data_dir} for mode {self.mode}.")
         # print(case_dirs[:5])
         # print(case_dirs[-5:])
-        case_dirs = case_dirs[:50]
+        # case_dirs = case_dirs[:50]
         for case_path in tqdm(case_dirs, desc=f"Reading {self.split} dataset"):
             eeg_path = os.path.join(case_path, 'eeg1.npy')
             emg_path = os.path.join(case_path, 'emg.npy')
@@ -134,18 +135,28 @@ class EEGSegmentDataset(Dataset):
 
     def get_bis_level(self, bis_segment_avg):
         # Reference: 
+        # if 80 <= bis_segment_avg <= 100:
+        #     return 0  # Class 0: Awake/Alert
+        # elif 60 <= bis_segment_avg < 80:
+        #     return 1  # Class 1: Light sedation
+        # elif 50 <= bis_segment_avg < 60:
+        #     return 2  # Class 2: Moderate sedation
+        # elif 40 <= bis_segment_avg < 50:
+        #     return 3  # Class 3: Moderate sedation
+        # elif 25 <= bis_segment_avg < 40:
+        #     return 4  # Class 4: Deep anesthesia
+        # elif 0 <= bis_segment_avg < 25:
+        #     return 5  # Class 5: Deep anesthesia
+        # else:
+        #     raise ValueError("BIS value out of range [0, 100]")
         if 80 <= bis_segment_avg <= 100:
             return 0  # Class 0: Awake/Alert
         elif 60 <= bis_segment_avg < 80:
             return 1  # Class 1: Light sedation
-        elif 50 <= bis_segment_avg < 60:
-            return 2  # Class 2: Moderate sedation
-        elif 40 <= bis_segment_avg < 50:
-            return 3  # Class 3: Deep sedation
-        elif 25 <= bis_segment_avg < 40:
-            return 4  # Class 4: General anesthesia
-        elif 0 <= bis_segment_avg < 25:
-            return 5  # Class 5: Deep anesthesia
+        elif 40 <= bis_segment_avg < 60:
+            return 2  # Class 2: Moderate
+        elif 0 <= bis_segment_avg < 40:
+            return 3  # Class 3: Deep anesthesia
         else:
             raise ValueError("BIS value out of range [0, 100]")
 
