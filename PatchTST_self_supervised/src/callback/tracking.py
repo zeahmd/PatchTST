@@ -1,11 +1,12 @@
 __all__ = ['TrackTimerCB', 'TrackTrainingCB', 'PrintResultsCB', 'TerminateOnNaNCB',
-            'TrackerCB', 'SaveModelCB', 'EarlyStoppingCB']
+            'TrackerCB', 'SaveModelCB', 'EarlyStoppingCB', 'SaveHistoryCB']
 
 from ..basics import *
 from .core import Callback
 import torch
 import time
 import numpy as np
+import pandas as pd
 from pathlib import Path
 
 
@@ -31,6 +32,18 @@ class TrackTimerCB(Callback):
             return f'{h}:{m:02d}:{s:02d}'
         else:
             return f'{m:02d}:{s:02d}'
+
+
+class SaveHistoryCB(Callback):
+
+    def __init__(self, path, fname):
+        super().__init__()        
+        self.save_path = path
+        self.save_model_name = fname
+
+    def after_epoch(self):
+        df = pd.DataFrame(data=self.learner.recorder)
+        df.to_csv(Path(self.save_path)/f'{self.save_model_name}_history.csv', float_format='%.6f', index=False)
 
 
 class TrackTrainingCB(Callback):
@@ -125,19 +138,19 @@ class TrackTrainingCB(Callback):
     def after_batch_valid(self): self.accumulate()
         
     def accumulate(self ):
-        xb, yb = self.batch
-        bs = len(xb)                                
+        xb1, xb2, yb1, yb2 = self.batch # eeg, eeg_spect, emg, bis
+        bs = len(xb1)                                
         self.batch_recorder['n_samples'].append(bs)
         # get batch loss 
         loss = self.loss.detach()*bs if self.mean_reduction_ else self.loss.detach()        
         self.batch_recorder['batch_losses'].append(loss)
         
-        if yb is None: self.batch_recorder['with_metrics'] = False
+        if yb2 is None: self.batch_recorder['with_metrics'] = False
         if len(self.metrics) == 0: self.batch_recorder['with_metrics'] = False
         # accumulate prediction and target          
         if self.batch_recorder['with_metrics']:
-            self.preds.append(self.pred.detach().cpu())
-            self.targs.append(yb.detach().cpu())
+            self.preds.append(self.pred1.detach().cpu())
+            self.targs.append(yb2.detach().cpu())
     
 
     def compute_scores(self):

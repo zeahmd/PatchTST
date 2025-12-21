@@ -31,22 +31,22 @@ def accuracy(y_true, y_pred):
 
 def precision(y_true, y_pred):
     _, predicted = torch.max(y_pred, 1)  # Get predicted class indices
-    return multiclass_precision(predicted, y_true, num_classes=y_pred.size(1), average='macro')
+    return multiclass_precision(predicted, y_true, num_classes=y_pred.size(1), average='macro').to('cpu').numpy()
 
 def recall(y_true, y_pred):
     _, predicted = torch.max(y_pred, 1)  # Get predicted class indices
-    return multiclass_recall(predicted, y_true, num_classes=y_pred.size(1), average='macro')
+    return multiclass_recall(predicted, y_true, num_classes=y_pred.size(1), average='macro').to('cpu').numpy()
 
 def f1_score(y_true, y_pred):
     _, predicted = torch.max(y_pred, 1)  # Get predicted class indices
-    return multiclass_f1_score(predicted, y_true, num_classes=y_pred.size(1), average='macro')
+    return multiclass_f1_score(predicted, y_true, num_classes=y_pred.size(1), average='macro').to('cpu').numpy()
 
 def auroc(y_true, y_pred):
     predicted = F.softmax(y_pred, dim=1) # even if we don't apply softmax, multiclass_auroc will do it internally
-    return multiclass_auroc(predicted, y_true, num_classes=y_pred.size(1), average='macro')
+    return multiclass_auroc(predicted, y_true, num_classes=y_pred.size(1), average='macro').to('cpu').numpy()
 
 def conf_mat(y_true, y_pred):
     _, predicted = torch.max(y_pred, 1)  # Get predicted class indices
     conf_matrix = multiclass_confusion_matrix(predicted, y_true, num_classes=y_pred.size(1))
     print("Confusion Matrix:\n", conf_matrix)#, file=sys.stderr)
-    return conf_matrix[0][0]
+    return conf_matrix[0][0].to('cpu').numpy()

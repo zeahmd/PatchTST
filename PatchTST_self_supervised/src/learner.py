@@ -22,21 +22,21 @@ from unittest.mock import patch
 
 class Learner(GetAttr):
 
-    def __init__(self, dls, model, 
+    def __init__(self, args, dls, model, 
                         loss_func=None, 
                         lr=1e-3, 
                         cbs=None, 
                         metrics=None, 
                         opt_func=Adam,
                         **kwargs):
-                
+        self.args = args
         self.model, self.dls, self.loss_func, self.lr = model, dls, loss_func, lr
         self.opt_func = opt_func
         #self.opt = self.opt_func(self.model.parameters(), self.lr) 
         self.set_opt()
         
         self.metrics = metrics
-        self.n_inp  = 2
+        self.n_inp  = 4
         # self.n_inp = self.dls.train.dataset.n_inp if self.dls else 0
         # Initialize callbacks                 
         if cbs and not isinstance(cbs, List): cbs = [cbs]    
@@ -52,7 +52,7 @@ class Learner(GetAttr):
 
     def default_callback(self):
         "get a set of default callbacks"
-        default_cbs = [ SetupLearnerCB(), TrackTimerCB(), 
+        default_cbs = [ SetupLearnerCB(self.args.dataset, self.args.mode), TrackTimerCB(), 
                         TrackTrainingCB(train_metrics=True, valid_metrics=True)]                  
         return default_cbs
     
@@ -61,7 +61,13 @@ class Learner(GetAttr):
         default_cbs = self.default_callback()       
         self.cbs = update_callbacks(cbs, default_cbs) if cbs else default_cbs        
         # add print CB
-        self.cbs += [PrintResultsCB()]        
+        self.cbs += [PrintResultsCB()]
+        # check self.cbs has SaveHistoryCB, if it has move to the last
+        # so that history is saved after all other callbacks are done
+        if any(isinstance(cb, SaveHistoryCB) for cb in self.cbs):
+            save_history_cb = [cb for cb in self.cbs if isinstance(cb, SaveHistoryCB)][0]
+            self.cbs.remove(save_history_cb)
+            self.cbs += [save_history_cb]        
         for cb in self.cbs: cb.learner = self     
         self('init_cb')       
 
@@ -161,7 +167,7 @@ class Learner(GetAttr):
         
     def _do_batch_train(self):        
         # forward + get loss + backward + optimize          
-        self.pred, self.loss = self.train_step(self.batch)
+        self.pred1, self.pred2, self.loss = self.train_step(self.batch)
         # print(self.loss)                                      
         # zero the parameter gradients
         self.opt.zero_grad()                 
@@ -172,35 +178,35 @@ class Learner(GetAttr):
 
     def train_step(self, batch):
         # get the inputs
-        self.xb, self.yb = batch
+        self.xb1, self.xb2, self.yb1, self.yb2 = batch # time, freq, emg, bis
         # print(torch.isnan(self.xb.sum()), torch.isnan(self.yb.sum()))
         # forward
-        pred = self.model_forward()
+        pred1, pred2 = self.model_forward()
         # compute loss
-        loss = self.loss_func(pred, self.yb)
+        loss = self.loss_func(pred1, self.yb2)
         # print(loss)
-        return pred, loss
+        return pred1, pred2, loss
 
     def model_forward(self):
         self('before_forward')
-        self.pred = self.model(self.xb)
+        self.pred1, self.pred2 = self.model(self.xb1, self.xb2)
         self('after_forward')
-        return self.pred
+        return self.pred1, self.pred2
 
     def _do_batch_validate(self):       
         # forward + calculate loss
-        self.pred, self.loss = self.valid_step(self.batch)
+        self.pred1, self.pred2, self.loss = self.valid_step(self.batch)
         # print(self.loss)     
 
     def valid_step(self, batch):
         # get the inputs
-        self.xb, self.yb = batch
+        self.xb1, self.xb2, self.yb1, self.yb2 = batch
         # print(self.xb[0])
         # forward
-        pred = self.model_forward()
+        pred1, pred2 = self.model_forward()
         # compute loss
-        loss = self.loss_func(pred, self.yb)
-        return pred, loss                                     
+        loss = self.loss_func(pred1, self.yb2)
+        return pred1, pred2, loss                                     
 
 
     def _do_batch_predict(self):   
@@ -270,7 +276,15 @@ class Learner(GetAttr):
         self.preds, self.targets = to_numpy([cb.preds, cb.targets])
         # calculate scores
         if scores: 
-            s_vals = [score(cb.targets, cb.preds).to('cpu').numpy() for score in list(scores)]
+            # s_vals = [score(cb.targets, cb.preds).to('cpu').numpy() for score in list(scores)]
+            s_vals = {}
+            for score in list(scores):
+                metric_name = score.__name__
+                tscore = score(cb.targets, cb.preds)
+                if isinstance(tscore, torch.Tensor):
+                    s_vals[metric_name] = tscore.to('cpu').numpy()
+                else:
+                    s_vals[metric_name] = tscore
             return self.preds, self.targets, s_vals
         else: return self.preds, self.targets
 

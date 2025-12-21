@@ -35,7 +35,8 @@ class Callback(GetAttr):
 
 
 class SetupLearnerCB(Callback): 
-    def __init__(self):        
+    def __init__(self, dataset, train_mode):
+        self.dataset = dataset        
         self.device = default_device(use_cuda=True)
 
     def before_batch_train(self): self._to_device()
@@ -45,9 +46,11 @@ class SetupLearnerCB(Callback):
 
     def _to_device(self):
         batch = to_device(self.batch, self.device)        
-        if self.n_inp > 1: xb, yb = batch
-        else: xb, yb = batch, None        
-        self.learner.batch = xb, yb
+        if self.n_inp > 1:
+            if self.dataset == 'eeg_time_freq':
+                xb1, xb2, yb1, yb2 =  batch
+        # else: xb, yb = batch, None        
+        self.learner.batch = xb1, xb2, yb1, yb2
         
     def before_fit(self): 
         "Set model to cuda before training"                

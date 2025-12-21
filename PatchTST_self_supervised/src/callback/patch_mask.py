@@ -7,15 +7,17 @@ from .core import Callback
 # Cell
 class PatchCB(Callback):
 
-    def __init__(self, patch_len, stride ):
+    def __init__(self, time_patch_len, freq_patch_len, time_stride, freq_stride):
         """
         Callback used to perform patching on the batch input data
         Args:
             patch_len:        patch length
             stride:           stride
         """
-        self.patch_len = patch_len
-        self.stride = stride
+        self.time_patch_len = time_patch_len
+        self.freq_patch_len = freq_patch_len
+        self.time_stride = time_stride
+        self.freq_stride = freq_stride
 
     def before_forward(self): self.set_patch()
        
@@ -23,9 +25,16 @@ class PatchCB(Callback):
         """
         take xb from learner and convert to patch: [bs x seq_len x n_vars] -> [bs x num_patch x n_vars x patch_len]
         """
-        xb_patch, num_patch = create_patch(self.xb, self.patch_len, self.stride)    # xb: [bs x seq_len x n_vars]
+        xb1, xb2 = self.xb1, self.xb2   # xb1: time domain, xb2: freq domain
+        # change xb2 from [bs x freq_bins x seq_len] to [bs x (seq_len * freq_bins)]
+        xb2 = xb2.permute(0,2,1)   # xb2: [bs x seq_len x freq_bins]
+        xb2 = xb2.reshape(xb2.shape[0], -1)
+        xb1_patch, num_patch = create_patch(xb1, self.time_patch_len, self.time_stride)    # xb: [bs x seq_len x n_vars]
+        xb2_patch, num_patch = create_patch(xb2, self.freq_patch_len, self.freq_stride)    # xb: [bs x seq_len x n_vars]
         # learner get the transformed input
-        self.learner.xb = xb_patch                              # xb_patch: [bs x num_patch x n_vars x patch_len]           
+        # TEST: all(self.xb2[10][:, 10] == xb2_patch[10, 10, 0, :])
+        self.learner.xb1 = xb1_patch
+        self.learner.xb2 = xb2_patch                                    # xb_patch: [bs x num_patch x n_vars x patch_len]           
 
 
 class PatchMaskCB(Callback):

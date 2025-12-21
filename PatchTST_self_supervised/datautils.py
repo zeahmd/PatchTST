@@ -20,13 +20,14 @@ def get_dls(params):
     assert params.dataset in DSETS, f"Unrecognized dset (`{params.dset}`). Options include: {DSETS}"
     if not hasattr(params,'use_time_features'): params.use_time_features = False
 
-    if params.dataset == 'eeg_time':
+    if params.dataset in ['eeg_time', 'eeg_freq', 'eeg_time_freq']:
         root_path = '/home/woody/iwso/iwso204h/vitaldb/cleaned_data'
         # size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(
                 datasetCls=EEGSegmentDataset,
                 dataset_kwargs={
                 'data_dir': root_path,
+                'dataset': params.dataset,
                 'segment_sec': params.segment_sec,
                 'eeg_rate': params.eeg_rate,
                 'emg_rate': params.emg_rate,
@@ -36,7 +37,7 @@ def get_dls(params):
                 batch_size=params.batch_size,
                 workers=params.num_workers,
                 )
-    elif params.dset == 'ettm1':
+    elif params.dataset == 'ettm1':
         root_path = '/data/datasets/public/ETDataset/ETT-small/'
         size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(
@@ -52,7 +53,7 @@ def get_dls(params):
                 batch_size=params.batch_size,
                 workers=params.num_workers,
                 )
-    elif params.dset == 'ettm2':
+    elif params.dataset == 'ettm2':
         root_path = '/data/datasets/public/ETDataset/ETT-small/'
         size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(
@@ -69,7 +70,7 @@ def get_dls(params):
                 workers=params.num_workers,
                 )
 
-    elif params.dset == 'etth1':
+    elif params.dataset == 'etth1':
         root_path = '/data/datasets/public/ETDataset/ETT-small/'
         size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(
@@ -87,7 +88,7 @@ def get_dls(params):
                 )
 
 
-    elif params.dset == 'etth2':
+    elif params.dataset == 'etth2':
         root_path = '/data/datasets/public/ETDataset/ETT-small/'
         size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(
@@ -105,7 +106,7 @@ def get_dls(params):
                 )
     
 
-    elif params.dset == 'electricity':
+    elif params.dataset == 'electricity':
         root_path = '/data/datasets/public/electricity/'
         size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(
@@ -122,7 +123,7 @@ def get_dls(params):
                 workers=params.num_workers,
                 )
 
-    elif params.dset == 'traffic':
+    elif params.dataset == 'traffic':
         root_path = '/data/datasets/public/traffic/'
         size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(
@@ -139,7 +140,7 @@ def get_dls(params):
                 workers=params.num_workers,
                 )
     
-    elif params.dset == 'weather':
+    elif params.dataset == 'weather':
         root_path = '/data/datasets/public/weather/'
         size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(
@@ -156,7 +157,7 @@ def get_dls(params):
                 workers=params.num_workers,
                 )
 
-    elif params.dset == 'illness':
+    elif params.dataset == 'illness':
         root_path = '/data/datasets/public/illness/'
         size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(
@@ -173,7 +174,7 @@ def get_dls(params):
                 workers=params.num_workers,
                 )
 
-    elif params.dset == 'exchange':
+    elif params.dataset == 'exchange':
         root_path = '/data/datasets/public/exchange_rate/'
         size = [params.context_points, 0, params.target_points]
         dls = DataLoaders(

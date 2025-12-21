@@ -24,7 +24,8 @@ class PatchTST(nn.Module):
          [bs x target_dim] for classification
          [bs x num_patch x n_vars x patch_len] for pretrain
     """
-    def __init__(self, c_in:int, target_dim:int, patch_len:int, stride:int, num_patch:int, 
+    def __init__(self, c_in:int, target_dim:int, time_patch_len:int, freq_patch_len:int,
+                 time_stride:int, freq_stride:int, num_patch:int, use_emg:bool=False,
                  n_layers:int=3, d_model=128, n_heads=16, shared_embedding=True, d_ff:int=256, 
                  norm:str='BatchNorm', attn_dropout:float=0., dropout:float=0., act:str="gelu", 
                  res_attention:bool=True, pre_norm:bool=False, store_attn:bool=False,
@@ -36,7 +37,7 @@ class PatchTST(nn.Module):
 
         assert head_type in ['pretrain', 'prediction', 'regression', 'classification'], 'head type should be either pretrain, prediction, or regression'
         # Backbone
-        self.backbone = PatchTSTEncoder(c_in, num_patch=num_patch, patch_len=patch_len, 
+        self.backbone = PatchTSTEncoder(c_in, num_patch=num_patch, time_patch_len=time_patch_len, freq_patch_len=freq_patch_len, 
                                 n_layers=n_layers, d_model=d_model, n_heads=n_heads, 
                                 shared_embedding=shared_embedding, d_ff=d_ff,
                                 attn_dropout=attn_dropout, dropout=dropout, act=act, 
@@ -56,18 +57,26 @@ class PatchTST(nn.Module):
         elif head_type == "classification":
             self.head = ClassificationHead(self.n_vars, d_model, target_dim, head_dropout)
 
+        if use_emg:
+            self.emg_head = EMGHead(self.n_vars, d_model, target_dim, head_dropout)
 
-    def forward(self, z):                             
+
+    def forward(self, x1, x2):                             
         """
         z: tensor [bs x num_patch x n_vars x patch_len]
         """   
-        z = self.backbone(z)                                                                # z: [bs x nvars x d_model x num_patch]
-        z = self.head(z)                                                                    
+        z = self.backbone(x1, x2)                                                                # z: [bs x nvars x d_model x num_patch]
+        z1 = self.head(z)
         # z: [bs x target_dim x nvars] for prediction
         #    [bs x target_dim] for regression
         #    [bs x target_dim] for classification
         #    [bs x num_patch x n_vars x patch_len] for pretrain
-        return z
+
+        if hasattr(self, 'emg_head'):
+            z2 = self.emg_head(z)
+            return z1, z2
+        else:
+            return z1                                                                    
 
 
 class RegressionHead(nn.Module):
@@ -88,6 +97,25 @@ class RegressionHead(nn.Module):
         x = self.dropout(x)
         y = self.linear(x)         # y: bs x output_dim
         if self.y_range: y = SigmoidRange(*self.y_range)(y)        
+        return y
+    
+
+class EMGHead(nn.Module):
+    def __init__(self, n_vars, d_model, output_dim, head_dropout):
+        super().__init__()
+        self.flatten = nn.Flatten(start_dim=1)
+        self.dropout = nn.Dropout(head_dropout)
+        self.linear = nn.Linear(n_vars*d_model, output_dim)
+
+    def forward(self, x):
+        """
+        x: [bs x nvars x d_model x num_patch]
+        output: [bs x output_dim]
+        """
+        x = x.mean(dim=-1)             # average over the sequence dimension, x: bs x nvars x d_model
+        x = self.flatten(x)         # x: bs x nvars * d_model
+        x = self.dropout(x)
+        y = self.linear(x)         # y: bs x output_dim
         return y
 
 
@@ -174,7 +202,7 @@ class PretrainHead(nn.Module):
 
 
 class PatchTSTEncoder(nn.Module):
-    def __init__(self, c_in, num_patch, patch_len, 
+    def __init__(self, c_in, num_patch, time_patch_len, freq_patch_len, 
                  n_layers=3, d_model=128, n_heads=16, shared_embedding=True,
                  d_ff=256, norm='BatchNorm', attn_dropout=0., dropout=0., act="gelu", store_attn=False,
                  res_attention=True, pre_norm=False,
@@ -183,16 +211,18 @@ class PatchTSTEncoder(nn.Module):
         super().__init__()
         self.n_vars = c_in
         self.num_patch = num_patch
-        self.patch_len = patch_len
+        self.time_patch_len = time_patch_len
+        self.freq_patch_len = freq_patch_len
         self.d_model = d_model
         self.shared_embedding = shared_embedding        
 
         # Input encoding: projection of feature vectors onto a d-dim vector space
         if not shared_embedding: 
             self.W_P = nn.ModuleList()
-            for _ in range(self.n_vars): self.W_P.append(nn.Linear(patch_len, d_model))
+            for _ in range(self.n_vars): self.W_P.append(nn.Linear(time_patch_len, d_model))
         else:
-            self.W_P = nn.Linear(patch_len, d_model)      
+            self.W_PT = nn.Linear(time_patch_len, d_model)
+            self.W_PF = nn.Linear(freq_patch_len, d_model)      
 
         # Positional encoding
         self.W_pos = positional_encoding(pe, learn_pe, num_patch, d_model)
@@ -205,11 +235,14 @@ class PatchTSTEncoder(nn.Module):
                                    pre_norm=pre_norm, activation=act, res_attention=res_attention, n_layers=n_layers, 
                                     store_attn=store_attn)
 
-    def forward(self, x) -> Tensor:          
+    def forward(self, x1, x2) -> Tensor:          
         """
-        x: tensor [bs x num_patch x nvars x patch_len]
+        x1: tensor [bs x num_patch x nvars x time_patch_len]
+        x2: tensor [bs x num_patch x nvars x freq_patch_len]
         """
-        bs, num_patch, n_vars, patch_len = x.shape
+        # TODO: test x2 one more time by computing spectrogram of x1
+        bs, num_patch, n_vars, time_patch_len = x1.shape
+        _, _, _, freq_patch_len = x2.shape
         # Input encoding
         if not self.shared_embedding:
             x_out = []
@@ -218,16 +251,24 @@ class PatchTSTEncoder(nn.Module):
                 x_out.append(z)
             x = torch.stack(x_out, dim=2)
         else:
-            x = self.W_P(x)                                                      # x: [bs x num_patch x nvars x d_model]
-        x = x.transpose(1,2)                                                     # x: [bs x nvars x num_patch x d_model]        
+            xt = self.W_PT(x1) # xt: [bs x num_patch x nvars x d_model]
+            xf = self.W_PF(x2) # xf: [bs x num_patch x nvars x d_model] 
+        xt = xt.transpose(1,2)
+        xf = xf.transpose(1,2)                                                     # x: [bs x nvars x num_patch x d_model]        
 
-        u = torch.reshape(x, (bs*n_vars, num_patch, self.d_model) )              # u: [bs * nvars x num_patch x d_model]
-        u = self.dropout(u + self.W_pos)                                         # u: [bs * nvars x num_patch x d_model]
+        # sharing positional encoding across time and freq
+        ut = torch.reshape(xt, (bs*n_vars, num_patch, self.d_model))              # u: [bs * nvars x num_patch x d_model]
+        ut = self.dropout(ut + self.W_pos)                                         # u: [bs * nvars x num_patch x d_model]
+        uf = torch.reshape(xf, (bs*n_vars, num_patch, self.d_model))              # u: [bs * nvars x num_patch x d_model]
+        uf = self.dropout(uf + self.W_pos)                                         # u: [bs * nvars x num_patch x d_model]
+        
+        # concatenate time and freq features along num_patch dimension
+        u = torch.cat([ut, uf], dim=1)                                            # u: [bs * nvars x (num_patch*2) x d_model]
 
         # Encoder
-        z = self.encoder(u)                                                      # z: [bs * nvars x num_patch x d_model]
-        z = torch.reshape(z, (-1,n_vars, num_patch, self.d_model))               # z: [bs x nvars x num_patch x d_model]
-        z = z.permute(0,1,3,2)                                                   # z: [bs x nvars x d_model x num_patch]
+        z = self.encoder(u)                                                      # z: [bs * nvars x (num_patch*2) x d_model]
+        z = torch.reshape(z, (-1, n_vars, num_patch*2, self.d_model))               # z: [bs x nvars x (num_patch*2) x d_model]
+        z = z.permute(0,1,3,2)                                                   # z: [bs x nvars x d_model x (num_patch*2)]
 
         return z
     
