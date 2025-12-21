@@ -1,11 +1,12 @@
 __all__ = ['TrackTimerCB', 'TrackTrainingCB', 'PrintResultsCB', 'TerminateOnNaNCB',
-            'TrackerCB', 'SaveModelCB', 'EarlyStoppingCB']
+            'TrackerCB', 'SaveModelCB', 'EarlyStoppingCB', 'SaveHistoryCB']
 
 from ..basics import *
 from .core import Callback
 import torch
 import time
 import numpy as np
+import pandas as pd
 from pathlib import Path
 
 
@@ -31,6 +32,18 @@ class TrackTimerCB(Callback):
             return f'{h}:{m:02d}:{s:02d}'
         else:
             return f'{m:02d}:{s:02d}'
+
+
+class SaveHistoryCB(Callback):
+
+    def __init__(self, path, fname):
+        super().__init__()        
+        self.save_path = path
+        self.save_model_name = fname
+
+    def after_epoch(self):
+        df = pd.DataFrame(data=self.learner.recorder)
+        df.to_csv(Path(self.save_path)/f'{self.save_model_name}_history.csv', float_format='%.6f', index=False)
 
 
 class TrackTrainingCB(Callback):

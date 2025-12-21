@@ -72,6 +72,7 @@ class DataLoaders:
         if self.dataset_kwargs.get('mode') in ['alltrain', 'finetune']:
             self.label_distribution[split] = dataset.get_label_distribution()
         sampler = self.get_sampler(dataset, self.dataset_kwargs.get('mode'), split)
+        print(f"Using sampler: {sampler} for split: {split}")
         if len(dataset) == 0: return None
         return DataLoader(
             dataset,
@@ -80,6 +81,7 @@ class DataLoaders:
             num_workers=self.workers,
             collate_fn=self.collate_fn,
             sampler=sampler
+            # sampler=None
         )
 
 

@@ -61,7 +61,13 @@ class Learner(GetAttr):
         default_cbs = self.default_callback()       
         self.cbs = update_callbacks(cbs, default_cbs) if cbs else default_cbs        
         # add print CB
-        self.cbs += [PrintResultsCB()]        
+        self.cbs += [PrintResultsCB()]
+        # check self.cbs has SaveHistoryCB, if it has move to the last
+        # so that history is saved after all other callbacks are done
+        if any(isinstance(cb, SaveHistoryCB) for cb in self.cbs):
+            save_history_cb = [cb for cb in self.cbs if isinstance(cb, SaveHistoryCB)][0]
+            self.cbs.remove(save_history_cb)
+            self.cbs += [save_history_cb]        
         for cb in self.cbs: cb.learner = self     
         self('init_cb')       
 
@@ -270,7 +276,15 @@ class Learner(GetAttr):
         self.preds, self.targets = to_numpy([cb.preds, cb.targets])
         # calculate scores
         if scores: 
-            s_vals = [score(cb.targets, cb.preds).to('cpu').numpy() for score in list(scores)]
+            # s_vals = [score(cb.targets, cb.preds).to('cpu').numpy() for score in list(scores)]
+            s_vals = {}
+            for score in list(scores):
+                metric_name = score.__name__
+                tscore = score(cb.targets, cb.preds)
+                if isinstance(tscore, torch.Tensor):
+                    s_vals[metric_name] = tscore.to('cpu').numpy()
+                else:
+                    s_vals[metric_name] = tscore
             return self.preds, self.targets, s_vals
         else: return self.preds, self.targets
 

@@ -17,57 +17,59 @@ from datautils import *
 
 
 import argparse
+from pprint import pprint
 
 parser = argparse.ArgumentParser()
 # Dataset and dataloader
-parser.add_argument('--dset_pretrain', type=str, default='eeg_time', help='dataset name')
+parser.add_argument('--dataset', type=str, default='eeg_time', help='dataset name')
 parser.add_argument('--context_points', type=int, default=64, help='sequence length') # default=512
 parser.add_argument('--target_points', type=int, default=96, help='forecast horizon')
-parser.add_argument('--batch_size', type=int, default=64, help='batch size')
-parser.add_argument('--num_workers', type=int, default=0, help='number of workers for DataLoader')
+parser.add_argument('--batch_size', type=int, default=512, help='batch size')
+parser.add_argument('--num_workers', type=int, default=8, help='number of workers for DataLoader')
 parser.add_argument('--scaler', type=str, default='standard', help='scale the input data')
 parser.add_argument('--features', type=str, default='M', help='for multivariate model or univariate model')
 # Patch
-parser.add_argument('--patch_len', type=int, default=64, help='patch length') # default=512
-parser.add_argument('--stride', type=int, default=64, help='stride between patch') # default=256
+parser.add_argument('--patch_len', type=int, default=128, help='patch length') # default=512
+parser.add_argument('--stride', type=int, default=128, help='stride between patch') # default=256
 # RevIN
 parser.add_argument('--revin', type=int, default=1, help='reversible instance normalization')
 # Model args
 parser.add_argument('--n_layers', type=int, default=3, help='number of Transformer layers')
 parser.add_argument('--n_heads', type=int, default=16, help='number of Transformer heads')
 parser.add_argument('--d_model', type=int, default=128, help='Transformer d_model')
-parser.add_argument('--d_ff', type=int, default=512, help='Tranformer MLP dimension')
+parser.add_argument('--d_ff', type=int, default=256, help='Tranformer MLP dimension')
 parser.add_argument('--dropout', type=float, default=0.2, help='Transformer dropout')
-parser.add_argument('--head_dropout', type=float, default=0.2, help='head dropout')
+parser.add_argument('--head_dropout', type=float, default=0.1, help='head dropout')
 # Pretrain mask
 parser.add_argument('--mask_ratio', type=float, default=0.4, help='masking ratio for the input')
 # Optimization args
-parser.add_argument('--n_epochs_pretrain', type=int, default=100, help='number of pre-training epochs')
+parser.add_argument('--n_epochs_pretrain', type=int, default=200, help='number of pre-training epochs')
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
 # model id to keep track of the number of models saved
 parser.add_argument('--pretrained_model_id', type=int, default=1, help='id of the saved pretrained model')
 parser.add_argument('--model_type', type=str, default='based_model', help='for multivariate model or univariate model')
 # adding vitaldb dataset args
-parser.add_argument('--segment_sec', type=int, default=5, help='segment length in seconds')
+parser.add_argument('--segment_sec', type=int, default=20, help='segment length in seconds')
 parser.add_argument('--eeg_rate', type=int, default=128, help='EEG sampling rate')
 parser.add_argument('--emg_rate', type=int, default=1, help='EMG sampling rate')
-parser.add_argument('--stride_sec', type=int, default=5, help='stride length in seconds')
+parser.add_argument('--stride_sec', type=int, default=20, help='stride length in seconds')
 parser.add_argument('--mode', type=str, default='pretrain', help='mode of the dataset, pretrain, alltrain or finetune')
 # adding some new args
 parser.add_argument('--c_in', type=int, default=1, help='number of input channels')
 parser.add_argument('--target_dim', type=int, default=1, help='number of output channels')
-parser.add_argument('--num_patch', type=int, default=10, help='number of patches') # default=4
+parser.add_argument('--num_patch', type=int, default=20, help='number of patches') # default=4
 
 
 args = parser.parse_args()
-print('args:', args)
+# print('args:', args)
+pprint(vars(args))
 args.save_pretrained_model = 'patchtst_pretrained_cw'+str(args.context_points)+'_patch'+str(args.patch_len) + '_stride'+str(args.stride) + '_epochs-pretrain' + str(args.n_epochs_pretrain) + '_mask' + str(args.mask_ratio)  + '_model' + str(args.pretrained_model_id)
-args.save_path = 'saved_models/' + args.dset_pretrain + '/masked_patchtst/' + args.model_type + '/'
+args.save_path = 'saved_models/' + args.dataset + '/masked_patchtst/' + args.model_type + '/'
 if not os.path.exists(args.save_path): os.makedirs(args.save_path)
 
 
 # get available GPU devide
-set_device()
+# set_device()
 
 
 # def get_model(c_in, args):
@@ -160,8 +162,9 @@ def pretrain_func(lr=args.lr):
 
 if __name__ == '__main__':
     
-    args.dset = args.dset_pretrain
-    suggested_lr = find_lr()
+    args.dset = args.dataset
+    # suggested_lr = find_lr()
+    suggested_lr = args.lr
     print('suggested_lr', suggested_lr)
     # Pretrain
     # suggested_lr = args.lr  # Use the default learning rate for pretraining

@@ -38,7 +38,7 @@ class DistributedTrainer(Callback):
 
 
     def after_fit(self): 
-        self.learner.model = self.learner.model.module 
+        self.learner.model = self.learner.model# .module 
         self.learner.dls.train = self.old_train_dl
         self.learner.dls.valid = self.old_valid_dl
 
