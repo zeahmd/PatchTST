@@ -26,9 +26,9 @@ class PatchCB(Callback):
         take xb from learner and convert to patch: [bs x seq_len x n_vars] -> [bs x num_patch x n_vars x patch_len]
         """
         xb1, xb2 = self.xb1, self.xb2   # xb1: time domain, xb2: freq domain
-        # change xb2 from [bs x freq_bins x seq_len] to [bs x (seq_len * freq_bins)]
-        xb2 = xb2.permute(0,2,1)   # xb2: [bs x seq_len x freq_bins]
-        xb2 = xb2.reshape(xb2.shape[0], -1)
+        # # change xb2 from [bs x freq_bins x seq_len] to [bs x (seq_len * freq_bins)]
+        # xb2 = xb2.permute(0,2,1)   # xb2: [bs x seq_len x freq_bins]
+        # xb2 = xb2.reshape(xb2.shape[0], -1)
         xb1_patch, num_patch = create_patch(xb1, self.time_patch_len, self.time_stride)    # xb: [bs x seq_len x n_vars]
         xb2_patch, num_patch = create_patch(xb2, self.freq_patch_len, self.freq_stride)    # xb: [bs x seq_len x n_vars]
         # learner get the transformed input

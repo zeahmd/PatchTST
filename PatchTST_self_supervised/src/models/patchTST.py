@@ -58,7 +58,7 @@ class PatchTST(nn.Module):
             self.head = ClassificationHead(self.n_vars, d_model, target_dim, head_dropout)
 
         if use_emg:
-            self.emg_head = EMGHead(self.n_vars, d_model, target_dim, head_dropout)
+            self.emg_head = EMGHead(self.n_vars, d_model, 1, head_dropout)
 
 
     def forward(self, x1, x2):                             

@@ -1,7 +1,7 @@
 
 from typing import List
 import torch
-from torch.optim import Adam
+from torch.optim import Adam, AdamW
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel
 
@@ -25,12 +25,13 @@ class Learner(GetAttr):
     def __init__(self, args, dls, model, 
                         loss_func=None, 
                         lr=1e-3, 
+                        l2_reg=0.0,
                         cbs=None, 
                         metrics=None, 
-                        opt_func=Adam,
+                        opt_func=AdamW,
                         **kwargs):
         self.args = args
-        self.model, self.dls, self.loss_func, self.lr = model, dls, loss_func, lr
+        self.model, self.dls, self.loss_func, self.lr, self.l2_reg, self.use_emg = model, dls, loss_func, lr, l2_reg, args.use_emg
         self.opt_func = opt_func
         #self.opt = self.opt_func(self.model.parameters(), self.lr) 
         self.set_opt()
@@ -43,6 +44,8 @@ class Learner(GetAttr):
         self.initialize_callbacks(cbs)        
         # Indicator of running lr_finder
         self.run_finder = False
+        if self.use_emg:
+            self.emg_loss = nn.MSELoss(reduction='mean')
 
     def set_opt(self):
         if self.model:
@@ -53,7 +56,7 @@ class Learner(GetAttr):
     def default_callback(self):
         "get a set of default callbacks"
         default_cbs = [ SetupLearnerCB(self.args.dataset, self.args.mode), TrackTimerCB(), 
-                        TrackTrainingCB(train_metrics=True, valid_metrics=True)]                  
+                        TrackTrainingCB(using_emg=self.use_emg, train_metrics=True, valid_metrics=True)]                  
         return default_cbs
     
 
@@ -167,7 +170,7 @@ class Learner(GetAttr):
         
     def _do_batch_train(self):        
         # forward + get loss + backward + optimize          
-        self.pred1, self.pred2, self.loss = self.train_step(self.batch)
+        self.pred, self.loss = self.train_step(self.batch)
         # print(self.loss)                                      
         # zero the parameter gradients
         self.opt.zero_grad()                 
@@ -181,21 +184,36 @@ class Learner(GetAttr):
         self.xb1, self.xb2, self.yb1, self.yb2 = batch # time, freq, emg, bis
         # print(torch.isnan(self.xb.sum()), torch.isnan(self.yb.sum()))
         # forward
-        pred1, pred2 = self.model_forward()
+        pred = self.model_forward()
         # compute loss
-        loss = self.loss_func(pred1, self.yb2)
+        if not self.use_emg:
+            loss = self.loss_func(pred, self.yb2)
+        else:
+            pred1, pred2 = pred  # pred1: bis, pred2: emg
+            loss1 = self.loss_func(pred1, self.yb2)
+            loss2 = self.emg_loss(pred2, self.yb1)
+
+            if not self.avg_bis_loss:
+                self.avg_bis_loss = torch.tensor(1.0).to(loss1.device)
+            if not self.avg_emg_loss:
+                self.avg_emg_loss = torch.tensor(1.0).to(loss2.device)
+            with torch.no_grad():
+                self.avg_bis_loss = 0.9 * self.avg_bis_loss + 0.1 * loss1.detach()
+                self.avg_emg_loss = 0.9 * self.avg_emg_loss + 0.1 * loss2.detach()
+            loss = (loss1 / self.avg_bis_loss) + (loss2 / self.avg_emg_loss)
+        
         # print(loss)
-        return pred1, pred2, loss
+        return pred, loss
 
     def model_forward(self):
         self('before_forward')
-        self.pred1, self.pred2 = self.model(self.xb1, self.xb2)
+        self.pred = self.model(self.xb1, self.xb2)
         self('after_forward')
-        return self.pred1, self.pred2
+        return self.pred
 
     def _do_batch_validate(self):       
         # forward + calculate loss
-        self.pred1, self.pred2, self.loss = self.valid_step(self.batch)
+        self.pred, self.loss = self.valid_step(self.batch)
         # print(self.loss)     
 
     def valid_step(self, batch):
@@ -203,10 +221,16 @@ class Learner(GetAttr):
         self.xb1, self.xb2, self.yb1, self.yb2 = batch
         # print(self.xb[0])
         # forward
-        pred1, pred2 = self.model_forward()
+        pred = self.model_forward()
         # compute loss
-        loss = self.loss_func(pred1, self.yb2)
-        return pred1, pred2, loss                                     
+        if not self.use_emg:
+            loss = self.loss_func(pred, self.yb2)
+        else:
+            pred1, pred2 = pred  # pred1: bis, pred2: emg
+            loss1 = self.loss_func(pred1, self.yb2)
+            loss2 = self.emg_loss(pred2, self.yb1)
+            loss = (loss1 / self.avg_bis_loss) + (loss2 / self.avg_emg_loss)
+        return pred, loss                                   
 
 
     def _do_batch_predict(self):   
