@@ -32,6 +32,7 @@ def get_dls(params):
                 'eeg_rate': params.eeg_rate,
                 'emg_rate': params.emg_rate,
                 'stride_sec': params.stride_sec,
+                'debug': params.debug,
                 'mode': params.mode,
                 },
                 batch_size=params.batch_size,

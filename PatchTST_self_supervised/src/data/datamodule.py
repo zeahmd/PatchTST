@@ -79,8 +79,8 @@ class DataLoaders:
             batch_size=self.batch_size,
             num_workers=self.workers,
             collate_fn=self.collate_fn,
-            # sampler=sampler
-            sampler=None
+            sampler=sampler
+            # sampler=None
         )
 
 
