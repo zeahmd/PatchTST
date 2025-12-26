@@ -20,9 +20,6 @@ from src.basics import default_device
 
 import argparse
 from pprint import pprint
-from functools import partial
-import optuna
-from optuna.trial import TrialState
 
 parser = argparse.ArgumentParser()
 # Dataset and dataloader
@@ -32,7 +29,7 @@ parser.add_argument('--num_classes', type=int, default=4, help='number of output
 parser.add_argument('--num_patch', type=int, default=20, help='number of patches')
 parser.add_argument('--batch_size', type=int, default=512, help='batch size')
 parser.add_argument('--num_workers', type=int, default=8, help='number of workers for DataLoader')
-parser.add_argument('--debug', type=int, default=0, help='whether to use debug mode')
+parser.add_argument('--debug', type=int, default=1, help='whether to use debug mode')
 # adding vitaldb dataset args
 parser.add_argument('--segment_sec', type=int, default=20, help='segment length in seconds')
 parser.add_argument('--eeg_rate', type=int, default=128, help='EEG sampling rate')
@@ -152,7 +149,8 @@ def train_func(lr=args.lr):
     learn = Learner(args, dls,
                         model, 
                         loss_func, 
-                        lr=lr, 
+                        lr=lr,
+                        l2_reg=0.0,
                         cbs=cbs,
                         # metrics=[mse]
                         metrics=[
