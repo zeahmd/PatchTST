@@ -20,6 +20,9 @@ from src.basics import default_device
 
 import argparse
 from pprint import pprint
+from functools import partial
+import optuna
+from optuna.trial import TrialState
 
 parser = argparse.ArgumentParser()
 # Dataset and dataloader
@@ -29,6 +32,7 @@ parser.add_argument('--num_classes', type=int, default=4, help='number of output
 parser.add_argument('--num_patch', type=int, default=20, help='number of patches')
 parser.add_argument('--batch_size', type=int, default=512, help='batch size')
 parser.add_argument('--num_workers', type=int, default=8, help='number of workers for DataLoader')
+parser.add_argument('--debug', type=int, default=0, help='whether to use debug mode')
 # adding vitaldb dataset args
 parser.add_argument('--segment_sec', type=int, default=20, help='segment length in seconds')
 parser.add_argument('--eeg_rate', type=int, default=128, help='EEG sampling rate')
@@ -47,7 +51,7 @@ parser.add_argument('--d_model', type=int, default=128, help='Transformer d_mode
 parser.add_argument('--d_ff', type=int, default=256, help='Tranformer MLP dimension')
 parser.add_argument('--dropout', type=float, default=0.2, help='Transformer dropout')
 parser.add_argument('--head_dropout', type=float, default=0.1, help='head dropout')
-parser.add_argument('--use_emg', type=int, default=1, help='whether to use emg prediction head')
+parser.add_argument('--use_emg', type=int, default=0, help='whether to use emg prediction head')
 # Optimization args
 parser.add_argument('--epochs', type=int, default=100, help='number of training epochs')
 parser.add_argument('--lr', type=float, default=1e-4, help='learning rate')
@@ -56,7 +60,9 @@ parser.add_argument('--model_id', type=int, default=1, help='id of the saved mod
 parser.add_argument('--model_type', type=str, default='based_model', help='for multivariate model or univariate model')
 # training
 parser.add_argument('--is_train', type=int, default=1, help='training the model')
-
+# Hyperparameter optimization
+parser.add_argument('--is_hyperopt', type=int, default=1, help='whether to do hyperparameter optimization')
+parser.add_argument('--n_trials', type=int, default=5, help='number of hyperparameter optimization trials')
 
 
 args = parser.parse_args()
@@ -137,7 +143,7 @@ def train_func(lr=args.lr):
     cbs = []
     cbs += [
          PatchCB(time_patch_len=args.time_patch_len, freq_patch_len=args.freq_patch_len, time_stride=args.time_stride, freq_stride=args.freq_stride),
-         SaveModelCB(monitor='valid_loss', fname=args.save_model_name, 
+         SaveModelCB(monitor='valid_f1_score', fname=args.save_model_name, 
                      path=args.save_path),
         SaveHistoryCB(path=args.save_path, fname=args.save_model_name)
         ]
