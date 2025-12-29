@@ -48,8 +48,9 @@ class SaveHistoryCB(Callback):
 
 class TrackTrainingCB(Callback):
 
-    def __init__(self, train_metrics=False, valid_metrics=True):
+    def __init__(self, using_emg=False, train_metrics=False, valid_metrics=True):
         super().__init__()        
+        self.using_emg = using_emg
         self.train_metrics, self.valid_metrics = train_metrics, valid_metrics 
 
     def init_cb_(self):
@@ -138,7 +139,9 @@ class TrackTrainingCB(Callback):
     def after_batch_valid(self): self.accumulate()
         
     def accumulate(self ):
-        xb, yb = self.batch
+        # IMPORTANT: changed xb, yb = self.batch to xb, yb = self.xb, self.yb
+        xb, yb = self.batch # eeg, (bis, emg)
+        # xb, yb = self.xb, self.yb
         bs = len(xb)                                
         self.batch_recorder['n_samples'].append(bs)
         # get batch loss 
@@ -149,8 +152,12 @@ class TrackTrainingCB(Callback):
         if len(self.metrics) == 0: self.batch_recorder['with_metrics'] = False
         # accumulate prediction and target          
         if self.batch_recorder['with_metrics']:
-            self.preds.append(self.pred.detach().cpu())
-            self.targs.append(yb.detach().cpu())
+            if not self.using_emg:
+                self.preds.append(self.pred.detach().cpu())
+                self.targs.append(yb.detach().cpu())  # yb is a tuple (emg, bis)
+            else:
+                self.preds.append(self.pred[0].detach().cpu())
+                self.targs.append(yb[0].detach().cpu()) # append BIS to calculate metrics
     
 
     def compute_scores(self):

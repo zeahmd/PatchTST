@@ -11,6 +11,7 @@ class DataLoaders:
         dataset_kwargs: dict,
         batch_size: int,
         workers: int=0,
+        use_weighted_sampler: bool=False,
         collate_fn=None,
         shuffle_train = False,
         shuffle_val = False
@@ -24,6 +25,7 @@ class DataLoaders:
         self.dataset_kwargs = dataset_kwargs
         self.workers = workers
         self.collate_fn = collate_fn
+        self.use_weighted_sampler = use_weighted_sampler
         self.shuffle_train, self.shuffle_val = shuffle_train, shuffle_val
         self.label_distribution = {}
     
@@ -72,6 +74,8 @@ class DataLoaders:
         if self.dataset_kwargs.get('mode') in ['alltrain', 'finetune']:
             self.label_distribution[split] = dataset.get_label_distribution()
         sampler = self.get_sampler(dataset, self.dataset_kwargs.get('mode'), split)
+        if not self.use_weighted_sampler:
+            sampler = None
         print(f"Using sampler: {sampler} for split: {split}")
         if len(dataset) == 0: return None
         return DataLoader(

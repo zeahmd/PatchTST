@@ -57,7 +57,10 @@ class PatchMaskCB(Callback):
         xb_mask, _, self.mask, _ = random_masking(xb_patch, self.mask_ratio)   # xb_mask: [bs x num_patch x n_vars x patch_len]
         self.mask = self.mask.bool()    # mask: [bs x num_patch x n_vars]
         self.learner.xb = xb_mask       # learner.xb: masked 4D tensor    
-        self.learner.yb = xb_patch      # learner.yb: non-masked 4d tensor
+        if isinstance(self.learner.yb, tuple):
+            self.learner.yb = (xb_patch, self.learner.yb[1])   # learner.yb: non-masked 4d tensor
+        else:
+            self.learner.yb = xb_patch      # learner.yb: non-masked 4d tensor
  
     def _loss(self, preds, target):        
         """

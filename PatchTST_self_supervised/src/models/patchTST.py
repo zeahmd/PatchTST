@@ -24,7 +24,7 @@ class PatchTST(nn.Module):
          [bs x target_dim] for classification
          [bs x num_patch x n_vars x patch_len] for pretrain
     """
-    def __init__(self, c_in:int, target_dim:int, patch_len:int, stride:int, num_patch:int, 
+    def __init__(self, c_in:int, target_dim:int, patch_len:int, stride:int, num_patch:int, use_emg:bool=False,
                  n_layers:int=3, d_model=128, n_heads=16, shared_embedding=True, d_ff:int=256, 
                  norm:str='BatchNorm', attn_dropout:float=0., dropout:float=0., act:str="gelu", 
                  res_attention:bool=True, pre_norm:bool=False, store_attn:bool=False,
@@ -56,18 +56,25 @@ class PatchTST(nn.Module):
         elif head_type == "classification":
             self.head = ClassificationHead(self.n_vars, d_model, target_dim, head_dropout)
 
+        if use_emg:
+            self.emg_head = EMGHead(self.n_vars, d_model, 1, head_dropout)  # EMG regression head
+
 
     def forward(self, z):                             
         """
         z: tensor [bs x num_patch x n_vars x patch_len]
         """   
         z = self.backbone(z)                                                                # z: [bs x nvars x d_model x num_patch]
-        z = self.head(z)                                                                    
+        z1 = self.head(z)                                                                    
         # z: [bs x target_dim x nvars] for prediction
         #    [bs x target_dim] for regression
         #    [bs x target_dim] for classification
         #    [bs x num_patch x n_vars x patch_len] for pretrain
-        return z
+
+        if hasattr(self, 'emg_head'):
+            z2 = self.emg_head(z)      # z2: [bs x 1]
+            return z1, z2
+        return z1
 
 
 class RegressionHead(nn.Module):
@@ -88,6 +95,25 @@ class RegressionHead(nn.Module):
         x = self.dropout(x)
         y = self.linear(x)         # y: bs x output_dim
         if self.y_range: y = SigmoidRange(*self.y_range)(y)        
+        return y
+
+
+class EMGHead(nn.Module):
+    def __init__(self, n_vars, d_model, output_dim, head_dropout):
+        super().__init__()
+        self.flatten = nn.Flatten(start_dim=1)
+        self.dropout = nn.Dropout(head_dropout)
+        self.linear = nn.Linear(n_vars*d_model, output_dim)
+
+    def forward(self, x):
+        """
+        x: [bs x nvars x d_model x num_patch]
+        output: [bs x output_dim]
+        """
+        x = x.mean(dim=-1)             # average over the sequence dimension, x: bs x nvars x d_model
+        x = self.flatten(x)         # x: bs x nvars * d_model
+        x = self.dropout(x)
+        y = self.linear(x)         # y: bs x output_dim
         return y
 
 

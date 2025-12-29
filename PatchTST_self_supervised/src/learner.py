@@ -1,7 +1,7 @@
 
 from typing import List
 import torch
-from torch.optim import Adam
+from torch.optim import Adam, AdamW
 from torch import nn
 from torch.nn.parallel import DistributedDataParallel
 
@@ -22,15 +22,17 @@ from unittest.mock import patch
 
 class Learner(GetAttr):
 
-    def __init__(self, dls, model, 
+    def __init__(self, args, dls, model, 
                         loss_func=None, 
-                        lr=1e-3, 
+                        lr=1e-3,
+                        l2_reg=0.0, 
                         cbs=None, 
                         metrics=None, 
-                        opt_func=Adam,
+                        opt_func=AdamW,
                         **kwargs):
                 
-        self.model, self.dls, self.loss_func, self.lr = model, dls, loss_func, lr
+        self.model, self.dls, self.loss_func, self.lr, self.l2_reg, self.use_emg = model, dls, loss_func, lr, l2_reg, args.use_emg
+        self.mode = args.mode
         self.opt_func = opt_func
         #self.opt = self.opt_func(self.model.parameters(), self.lr) 
         self.set_opt()
@@ -43,17 +45,19 @@ class Learner(GetAttr):
         self.initialize_callbacks(cbs)        
         # Indicator of running lr_finder
         self.run_finder = False
+        if self.use_emg:
+            self.emg_loss = nn.MSELoss(reduction='mean')
 
     def set_opt(self):
         if self.model:
-            self.opt = self.opt_func(self.model.parameters(), self.lr) 
+            self.opt = self.opt_func(self.model.parameters(), lr=self.lr, weight_decay=self.l2_reg) 
         else: self.opt = None
 
 
     def default_callback(self):
         "get a set of default callbacks"
-        default_cbs = [ SetupLearnerCB(), TrackTimerCB(), 
-                        TrackTrainingCB(train_metrics=True, valid_metrics=True)]                  
+        default_cbs = [ SetupLearnerCB(using_emg=self.use_emg), TrackTimerCB(), 
+                        TrackTrainingCB(using_emg=self.use_emg, train_metrics=True, valid_metrics=True)]                  
         return default_cbs
     
 
@@ -113,9 +117,23 @@ class Learner(GetAttr):
         self.n_epochs = n_epochs        
         self.lr_max = lr_max if lr_max else self.lr
         cb = OneCycleLR(lr_max=self.lr_max, pct_start=pct_start)
-        self.fit(self.n_epochs, cbs=cb)                
-         
-         
+        self.fit(self.n_epochs, cbs=cb)  
+        # return val_f1_score at the last epoch
+        if self.mode != 'pretrain':
+            val_f1_score = None
+            for cb in self.cbs:
+                if isinstance(cb, TrackTrainingCB):
+                    # val_f1_score = float(cb.recorder['valid_f1_score'][-1])
+                    val_f1_score = float(max(cb.recorder['valid_f1_score']))
+            return val_f1_score
+        else:
+            val_loss = None
+            for cb in self.cbs:
+                if isinstance(cb, TrackTrainingCB):
+                    val_loss = float(min(cb.recorder['valid_loss']))
+            return val_loss
+
+
     def one_epoch(self, train):                           
         self.epoch_train() if train else self.epoch_validate()        
 
@@ -183,7 +201,22 @@ class Learner(GetAttr):
         # forward
         pred = self.model_forward()
         # compute loss
-        loss = self.loss_func(pred, self.yb)
+        if not self.use_emg:
+            loss = self.loss_func(pred, self.yb)
+        else:
+            pred1, pred2 = pred
+            loss1 = self.loss_func(pred1, self.yb[0])
+            loss2 = self.emg_loss(pred2, self.yb[1])
+            # loss = loss1 / loss1.detach() + loss2 / loss2.detach()
+            if not self.avg_bis_loss:
+                self.avg_bis_loss = torch.tensor(1.0).to(loss1.device)
+            if not self.avg_emg_loss:
+                self.avg_emg_loss = torch.tensor(1.0).to(loss2.device)
+            with torch.no_grad():
+                self.avg_bis_loss = 0.9 * self.avg_bis_loss + 0.1 * loss1.detach()
+                self.avg_emg_loss = 0.9 * self.avg_emg_loss + 0.1 * loss2.detach()
+            loss = (loss1 / self.avg_bis_loss) + (loss2 / self.avg_emg_loss)
+
         # print(loss)
         return pred, loss
 
@@ -205,7 +238,14 @@ class Learner(GetAttr):
         # forward
         pred = self.model_forward()
         # compute loss
-        loss = self.loss_func(pred, self.yb)
+        if not self.use_emg:
+            loss = self.loss_func(pred, self.yb)
+        else:
+            pred1, pred2 = pred
+            loss1 = self.loss_func(pred1, self.yb[0])
+            loss2 = self.emg_loss(pred2, self.yb[1])
+            # loss = (loss1 / self.avg_bis_loss) + (loss2 / self.avg_emg_loss)
+            loss = loss1 + (0.2 * loss2)
         return pred, loss                                     
 
 
@@ -267,7 +307,7 @@ class Learner(GetAttr):
         if dl is None: return
         else: self.dl = dl
         if weight_path is not None: self.load(weight_path)
-        cb = GetTestCB()
+        cb = GetTestCB(using_emg=self.use_emg)
         self.add_callback(cb)
         self('before_test')
         self.model.eval()
@@ -333,7 +373,7 @@ class Learner(GetAttr):
         if n_epochs > 0:
             print('Finetune the entire network')        
             self.unfreeze()
-            self.fit_one_cycle(n_epochs, lr_max=base_lr/2, pct_start=pct_start)
+            return self.fit_one_cycle(n_epochs, lr_max=base_lr/2, pct_start=pct_start)
     
 
     def linear_probe(self, n_epochs, base_lr=None, pct_start=0.3):
@@ -477,8 +517,10 @@ def transfer_weights(weights_path, model, exclude_head=True, device='cpu'):
         if name in new_state_dict:            
             matched_layers += 1
             input_param = new_state_dict[name]
-            if input_param.shape == param.shape: param.copy_(input_param)
-            else: unmatched_layers.append(name)
+            if input_param.shape == param.shape:
+                param.copy_(input_param)
+            else:
+                unmatched_layers.append(name)
         else:
             unmatched_layers.append(name)
             pass # these are weights that weren't in the original model, such as a new head
