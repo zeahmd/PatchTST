@@ -32,6 +32,7 @@ class Learner(GetAttr):
                         **kwargs):
         self.args = args
         self.model, self.dls, self.loss_func, self.lr, self.l2_reg, self.use_emg = model, dls, loss_func, lr, l2_reg, args.use_emg
+        self.mode = args.mode
         self.opt_func = opt_func
         #self.opt = self.opt_func(self.model.parameters(), self.lr) 
         self.set_opt()
@@ -116,9 +117,17 @@ class Learner(GetAttr):
         self.n_epochs = n_epochs        
         self.lr_max = lr_max if lr_max else self.lr
         cb = OneCycleLR(lr_max=self.lr_max, pct_start=pct_start)
-        self.fit(self.n_epochs, cbs=cb)                
-         
-         
+        self.fit(self.n_epochs, cbs=cb)
+        if self.mode != 'pretrain':
+            val_f1_score = None
+            for cb in self.cbs:
+                if isinstance(cb, TrackTrainingCB):
+                    # val_f1_score = float(cb.recorder['valid_f1_score'][-1])
+                    val_f1_score = float(max(cb.recorder['valid_f1_score']))
+            return val_f1_score
+        else:              
+            raise NotImplementedError("Hyperparameter optimization not implemented for self-supervised pretraining yet.")
+    
     def one_epoch(self, train):                           
         self.epoch_train() if train else self.epoch_validate()        
 
@@ -176,6 +185,8 @@ class Learner(GetAttr):
         self.opt.zero_grad()                 
         # gradient
         self.loss.backward()
+        # clip grad norm
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.1)
         # update weights
         self.opt.step() 
 
@@ -229,7 +240,8 @@ class Learner(GetAttr):
             pred1, pred2 = pred  # pred1: bis, pred2: emg
             loss1 = self.loss_func(pred1, self.yb2)
             loss2 = self.emg_loss(pred2, self.yb1)
-            loss = (loss1 / self.avg_bis_loss) + (loss2 / self.avg_emg_loss)
+            # loss = (loss1 / self.avg_bis_loss) + (loss2 / self.avg_emg_loss)
+            loss = loss1 + loss2
         return pred, loss                                   
 
 
@@ -248,7 +260,7 @@ class Learner(GetAttr):
            
     def test_step(self, batch):
         # get the inputs
-        self.xb, self.yb = batch
+        self.xb1, self.xb2, self.yb1, self.yb2 = batch
         # forward
         pred = self.model_forward()
         return pred, self.yb
@@ -291,7 +303,7 @@ class Learner(GetAttr):
         if dl is None: return
         else: self.dl = dl
         if weight_path is not None: self.load(weight_path)
-        cb = GetTestCB()
+        cb = GetTestCB(using_emg=self.use_emg)
         self.add_callback(cb)
         self('before_test')
         self.model.eval()
