@@ -75,16 +75,21 @@ class GetPredictionsCB(Callback):
          
 
 class GetTestCB(Callback):
-    def __init__(self):
+    def __init__(self, using_emg=False):
         super().__init__()
+        self.using_emg = using_emg
 
     def before_test(self):
         self.preds, self.targets = [], []        
     
     def after_batch_test(self):        
-        # append the prediction after each forward batch           
-        self.preds.append(self.pred)
-        self.targets.append(self.yb)
+        # append the prediction after each forward batch
+        if not self.using_emg:
+            self.preds.append(self.pred.detach().cpu())
+            self.targets.append(self.yb2.detach().cpu())
+        else:
+            self.preds.append(self.pred[0].detach().cpu())
+            self.targets.append(self.yb2.detach().cpu())
 
     def after_test(self):           
         self.preds = torch.concat(self.preds)#.detach().cpu().numpy()

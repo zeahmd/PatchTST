@@ -6,6 +6,7 @@ from torch.utils.data import Dataset
 from glob import glob
 from tqdm import tqdm
 
+from scipy import signal
 from scipy.signal import spectrogram
 
 
@@ -20,6 +21,40 @@ def fill_nan_values(signal_array, sampling_rate, max_gap_seconds=1.0):
     limit_samples = int(max_gap_seconds * sampling_rate)
     cleaned = s.interpolate(method='linear', limit=limit_samples, limit_direction='both')
     return cleaned.to_numpy()
+
+
+# def filter_with_nan_handling(raw_data, fs=128, lowcut=1.0, highcut=45.0):
+#     """
+#     Filters a signal containing NaNs by splitting it into continuous blocks.
+#     Discards any resulting blocks shorter than a minimum stable length.
+#     """
+#     # 1. Design the filter (SOS for stability)
+#     sos = signal.butter(4, [lowcut, highcut], btype='bandpass', fs=fs, output='sos')
+#     
+#     # 2. Identify indices of NaN vs Real Data
+#     is_nan = np.isnan(raw_data)
+#     
+#     # Use pandas to quickly find continuous groups of non-NaN data
+#     groups = (is_nan != pd.Series(is_nan).shift()).cumsum()
+#     filtered_output = np.full_like(raw_data, np.nan)
+#     
+#     # 3. Iterate through each chunk
+#     for _, group_data in pd.Series(raw_data).groupby(groups):
+#         # Only process if this chunk contains real numbers (not NaNs)
+#         if not np.isnan(group_data.iloc[0]):
+#             chunk = group_data.values
+#             
+#             # Skip chunks too short for the filter to stabilize (e.g., < 2 seconds)
+#             if len(chunk) < (fs * 2):
+#                 continue
+#                 
+#             # Apply zero-phase filter to this continuous block
+#             filtered_chunk = signal.sosfiltfilt(sos, chunk)
+#             
+#             # Place the filtered data back into the correct global indices
+#             filtered_output[group_data.index] = filtered_chunk
+#             
+#     return filtered_output
 
 
 class EEGSegmentDataset(Dataset):
@@ -85,6 +120,8 @@ class EEGSegmentDataset(Dataset):
             # Step 2: fill 1sec, 2sec gaps in EEG and EMG respectively
             eeg = fill_nan_values(eeg, self.eeg_rate, max_gap_seconds=1.0)
             emg = fill_nan_values(emg, self.emg_rate, max_gap_seconds=2.0)
+
+            # eeg = filter_with_nan_handling(eeg, fs=self.eeg_rate, lowcut=1.0, highcut=45.0)
 
             # Step 3: Normalize EEG, and EMG
             eeg = (eeg - np.nanmean(eeg)) / (np.nanstd(eeg) + 1e-5)
