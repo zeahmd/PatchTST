@@ -32,10 +32,13 @@ def get_dls(params):
                 'eeg_rate': params.eeg_rate,
                 'emg_rate': params.emg_rate,
                 'stride_sec': params.stride_sec,
+                'use_emg': params.use_emg,
+                'debug': params.debug,
                 'mode': params.mode,
                 },
                 batch_size=params.batch_size,
                 workers=params.num_workers,
+                use_weighted_sampler= params.use_weighted_sampler
                 )
     elif params.dataset == 'ettm1':
         root_path = '/data/datasets/public/ETDataset/ETT-small/'
